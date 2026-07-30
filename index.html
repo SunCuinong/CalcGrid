@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>数学题排版工具</title>
+<!-- MathJax 渲染数学公式 -->
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    // CHTML 输出：纯 HTML+CSS 渲染，不产生 SVG，html2canvas 可直接截取
+    chtml: { fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2' },
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
+<!-- html2canvas 截图 -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<!-- jsPDF 生成 PDF -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>数学题排版工具</h1>
+    <div class="actions">
+      <button id="clearBtn" class="btn btn-ghost">清空</button>
+      <button id="exportBtn" class="btn btn-primary">导出 PDF</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左侧：题目输入区（单个大输入框） -->
+    <aside class="editor-panel">
+      <div class="panel-head">
+        <span>题目输入</span>
+        <small id="countTip">共 0 题</small>
+      </div>
+      <div class="editor-body">
+        <textarea id="bulkInput" class="bulk-input" placeholder="在此粘贴所有题目，支持一次性粘贴。&#10;&#10;题目之间用空行隔开，或用 --- 分隔。&#10;&#10;支持数学公式，用 $...$ 包裹，例如：&#10;计算 $\dfrac{3}{4}+\dfrac{2}{3}$ 的值。"></textarea>
+      </div>
+      <div class="syntax-help">
+        <details>
+          <summary>公式语法帮助（点击展开）</summary>
+          <div class="help-grid">
+            <div class="help-row"><code>分数</code><code class="src">\dfrac{a}{b}</code><span class="demo">$\dfrac{a}{b}$</span></div>
+            <div class="help-row"><code>平方/上标</code><code class="src">x^2</code><span class="demo">$x^2$</span></div>
+            <div class="help-row"><code>下标</code><code class="src">x_i</code><span class="demo">$x_i$</span></div>
+            <div class="help-row"><code>根号</code><code class="src">\sqrt{2}</code><span class="demo">$\sqrt{2}$</span></div>
+            <div class="help-row"><code>n 次根号</code><code class="src">\sqrt[3]{8}</code><span class="demo">$\sqrt[3]{8}$</span></div>
+            <div class="help-row"><code>大括号（分组）</code><code class="src">\left\{ x \middle| x>0 \right\}</code><span class="demo">$\left\{ x \middle| x>0 \right\}$</span></div>
+            <div class="help-row"><code>绝对值</code><code class="src">\left| x \right|</code><span class="demo">$\left| x \right|$</span></div>
+            <div class="help-row"><code>括号自适应</code><code class="src">\left( \dfrac{a}{b} \right)</code><span class="demo">$\left( \dfrac{a}{b} \right)$</span></div>
+            <div class="help-row"><code>方程组</code><code class="src">\begin{cases} x+y=1 \\ x-y=3 \end{cases}</code><span class="demo">$$\begin{cases} x+y=1 \\ x-y=3 \end{cases}$$</span></div>
+            <div class="help-row"><code>大于等于</code><code class="src">\geq</code><span class="demo">$\geq$</span></div>
+            <div class="help-row"><code>不等号</code><code class="src">\neq</code><span class="demo">$\neq$</span></div>
+            <div class="help-row"><code>约等号</code><code class="src">\approx</code><span class="demo">$\approx$</span></div>
+            <div class="help-row"><code>乘号</code><code class="src">\times</code><span class="demo">$\times$</span></div>
+            <div class="help-row"><code>除号</code><code class="src">\div</code><span class="demo">$\div$</span></div>
+            <div class="help-row"><code>度数</code><code class="src">30^\circ</code><span class="demo">$30^\circ$</span></div>
+            <div class="help-row"><code>角</code><code class="src">\angle ABC</code><span class="demo">$\angle ABC$</span></div>
+            <div class="help-row"><code>三角形</code><code class="src">\triangle</code><span class="demo">$\triangle$</span></div>
+            <div class="help-row"><code>圆周率</code><code class="src">\pi</code><span class="demo">$\pi$</span></div>
+            <div class="help-row"><code>无穷</code><code class="src">\infty</code><span class="demo">$\infty$</span></div>
+            <div class="help-row"><code>求和</code><code class="src">\sum_{i=1}^{n}</code><span class="demo">$\sum_{i=1}^{n}$</span></div>
+          </div>
+          <p class="help-tip">行内公式用 <code>$...$</code>，独占一行的公式用 <code>$$...$$</code>。反斜杠 <code>\</code> 开头的是命令，需要成对的大括号 <code>{ }</code> 包裹参数。</p>
+        </details>
+      </div>
+    </aside>
+
+    <!-- 中间：预览区 -->
+    <section class="preview-panel">
+      <div class="panel-head">
+        <span>预览（每页 6 题 · 两列）</span>
+        <small>A4 纸张</small>
+      </div>
+      <div id="previewArea" class="preview-scroll">
+        <div id="pageContainer" class="page-container"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
