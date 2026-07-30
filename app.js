@@ -5,6 +5,7 @@ const PER_PAGE = 6;
 const $input = document.getElementById('bulkInput');
 const $count = document.getElementById('countTip');
 const $pages = document.getElementById('pageContainer');
+const $date = document.getElementById('datePicker');
 
 const DEFAULT_TEXT =
 `计算 $\\dfrac{3}{4} + \\dfrac{2}{3}$ 的结果。
@@ -57,7 +58,7 @@ function renderPreview() {
 
   const today = new Date();
   const pad = n => String(n).padStart(2, '0');
-  const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const dateStr = $date.value || `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
   const totalPages = Math.ceil(questions.length / PER_PAGE);
 
   for (let p = 0; p < totalPages; p++) {
@@ -121,6 +122,7 @@ window._onMathJaxReady = () => {
 
 // ---- 事件绑定 ----
 $input.addEventListener('input', () => { saveText(); schedulePreview(); });
+$date.addEventListener('change', () => { renderPreview(); });
 document.getElementById('clearBtn').addEventListener('click', () => {
   if (confirm('确定清空所有题目吗？')) {
     $input.value = '';
@@ -145,6 +147,11 @@ $input.addEventListener('keydown', (e) => {
 
 // ---- 初始化 ----
 $input.value = loadText();
+(function initDate() {
+  const today = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  $date.value = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+})();
 renderPreview();
 
 // ---- 导出 PDF ----
