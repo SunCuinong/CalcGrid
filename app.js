@@ -193,7 +193,7 @@ async function exportPDF() {
       pdf.addImage(imgData, 'JPEG', 0, 0, A4_W, A4_H, undefined, 'FAST');
     }
 
-    const filename = '数学题_' + new Date().toISOString().slice(0, 10) + '.pdf';
+    const filename = '数学题_' + ($date.value || new Date().toISOString().slice(0, 10)) + '.pdf';
     pdf.save(filename);
   } catch (e) {
     console.error('导出失败:', e);
