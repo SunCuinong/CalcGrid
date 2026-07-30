@@ -38,14 +38,14 @@ function saveText() {
   localStorage.setItem(STORAGE_KEY, $input.value);
 }
 
-// ---- 解析题目：按空行或 --- 分隔 ----
+// ---- 解析题目：按换行分隔，每行一道题 ----
 function parseQuestions(text) {
-  // 先按 --- 分隔
+  // 先按 --- 分隔（兼容旧格式）
   let parts = text.split(/\n\s*-{3,}\s*\n/);
-  // 再对每段按空行分隔，最终拍平
+  // 再按每一行拆分，过滤空行
   let questions = [];
   parts.forEach(p => {
-    p.split(/\n\s*\n/).forEach(s => {
+    p.split('\n').forEach(s => {
       s = s.trim();
       if (s) questions.push(s);
     });
