@@ -4,19 +4,23 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>数学题排版工具</title>
-<!-- MathJax 渲染数学公式 -->
 <script>
+  // MathJax 配置：先设置好，等脚本加载
   window.MathJax = {
     tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
-    // CHTML 输出：纯 HTML+CSS 渲染，不产生 SVG，html2canvas 可直接截取
     chtml: { fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2' },
-    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
+    startup: {
+      ready: () => {
+        MathJax.startup.defaultReady();
+        // MathJax 内部完全就绪后回调
+        if (window._onMathJaxReady) window._onMathJaxReady();
+      }
+    }
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
-<!-- html2canvas 截图 -->
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<!-- jsPDF 生成 PDF -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -30,11 +34,13 @@
   </header>
 
   <main class="layout">
-    <!-- 左侧：题目输入区（单个大输入框） -->
     <aside class="editor-panel">
       <div class="panel-head">
         <span>题目输入</span>
-        <small id="countTip">共 0 题</small>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button id="refreshBtn" class="btn btn-ghost" style="height:28px;font-size:12px;padding:0 10px;">刷新</button>
+          <small id="countTip">共 0 题</small>
+        </div>
       </div>
       <div class="editor-body">
         <textarea id="bulkInput" class="bulk-input" placeholder="在此粘贴所有题目，支持一次性粘贴。&#10;&#10;题目之间用空行隔开，或用 --- 分隔。&#10;&#10;支持数学公式，用 $...$ 包裹，例如：&#10;计算 $\dfrac{3}{4}+\dfrac{2}{3}$ 的值。"></textarea>
@@ -69,7 +75,6 @@
       </div>
     </aside>
 
-    <!-- 中间：预览区 -->
     <section class="preview-panel">
       <div class="panel-head">
         <span>预览（每页 6 题 · 两列）</span>

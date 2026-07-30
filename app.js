@@ -1,14 +1,11 @@
 // ===== 数学题排版工具 =====
-// 单个大输入框，题目之间用空行或 --- 分隔
 const STORAGE_KEY = 'yoyo_math_bulk_v2';
 const PER_PAGE = 6;
 
-// ---- DOM 引用 ----
 const $input = document.getElementById('bulkInput');
 const $count = document.getElementById('countTip');
 const $pages = document.getElementById('pageContainer');
 
-// ---- 默认示例 ----
 const DEFAULT_TEXT =
 `计算 $\\dfrac{3}{4} + \\dfrac{2}{3}$ 的结果。
 
@@ -26,7 +23,6 @@ const DEFAULT_TEXT =
 
 求 $\\sqrt[3]{27}$ 的值。`;
 
-// ---- 加载 ----
 function loadText() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -34,34 +30,19 @@ function loadText() {
   } catch (e) {}
   return DEFAULT_TEXT;
 }
-function saveText() {
-  localStorage.setItem(STORAGE_KEY, $input.value);
-}
+function saveText() { localStorage.setItem(STORAGE_KEY, $input.value); }
 
-// ---- 解析题目：按换行分隔，每行一道题 ----
+// 按换行分隔，每行一道题，空行 / --- 自动跳过
 function parseQuestions(text) {
-  // 先按 --- 分隔（兼容旧格式）
-  let parts = text.split(/\n\s*-{3,}\s*\n/);
-  // 再按每一行拆分，过滤空行
-  let questions = [];
-  parts.forEach(p => {
-    p.split('\n').forEach(s => {
-      s = s.trim();
-      if (s) questions.push(s);
-    });
-  });
-  return questions;
+  return text.split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && !/^-{3,}$/.test(s));
 }
 
-// ---- 预览渲染（防抖）----
 let previewTimer = null;
 function schedulePreview() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(renderPreview, 150);
-}
-
-function escapeHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function renderPreview() {
@@ -74,40 +55,99 @@ function renderPreview() {
     return;
   }
 
+  const today = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
   const totalPages = Math.ceil(questions.length / PER_PAGE);
+
   for (let p = 0; p < totalPages; p++) {
     const page = document.createElement('div');
     page.className = 'page';
+
+    const header = document.createElement('div');
+    header.className = 'page-header';
+    header.innerHTML = `<div class="page-title">Calculation Worksheet <span class="dot">·</span><span class="date">${dateStr}</span></div><hr class="page-line" />`;
+    page.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'page-grid';
     const start = p * PER_PAGE;
     const slice = questions.slice(start, start + PER_PAGE);
-    slice.forEach(q => {
+
+    slice.forEach((q, i) => {
       const item = document.createElement('div');
-      item.className = 'qitem';
-      item.innerHTML = `<span class="qbody">${escapeHtml(q)}</span>`;
-      page.appendChild(item);
+      item.className = 'qitem' + (i < 3 ? ' left-col' : ' right-col');
+      const span = document.createElement('span');
+      span.className = 'qbody';
+      span.textContent = q;     // 不转义，原样交给 MathJax
+      item.appendChild(span);
+      grid.appendChild(item);
     });
-    // 不足 6 题用空白占位，保持网格高度一致
     for (let k = slice.length; k < PER_PAGE; k++) {
       const ph = document.createElement('div');
-      ph.className = 'qitem empty';
+      ph.className = 'qitem empty' + (k < 3 ? ' left-col' : ' right-col');
       ph.innerHTML = '&nbsp;';
-      page.appendChild(ph);
+      grid.appendChild(ph);
     }
+    page.appendChild(grid);
     $pages.appendChild(page);
   }
 
-  // 重新渲染 MathJax
-  if (window.MathJax && window.MathJax.typesetPromise) {
-    window.MathJax.typesetPromise($pages).catch(err => console.warn('MathJax:', err));
-  }
-  // 同时渲染帮助区公式
-  const help = document.querySelector('.syntax-help');
-  if (help && window.MathJax && window.MathJax.typesetPromise) {
-    window.MathJax.typesetPromise(help).catch(() => {});
-  }
+  // 调用 MathJax 渲染
+  typesetMath();
 }
 
-// ---- 导出 PDF（MathJax CHTML → html2canvas 直接截取）----
+function typesetMath() {
+  if (window.MathJax && window.MathJax.typesetPromise) {
+    return window.MathJax.typesetPromise([$pages]).catch(err => console.warn('MathJax typeset:', err));
+  }
+  return Promise.resolve();
+}
+
+// MathJax 就绪回调（由 index.html 中 startup.ready 同步触发）
+window._onMathJaxReady = () => {
+  console.log('[MathJax] ready');
+  typesetMath();
+};
+
+// 兜底：脚本可能不在 head 里，轮询检测
+(function waitMJ() {
+  if (window.MathJax && window.MathJax.typesetPromise) {
+    typesetMath();
+    return;
+  }
+  setTimeout(waitMJ, 200);
+})();
+
+// ---- 事件绑定 ----
+$input.addEventListener('input', () => { saveText(); schedulePreview(); });
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (confirm('确定清空所有题目吗？')) {
+    $input.value = '';
+    saveText(); schedulePreview();
+    $input.focus();
+  }
+});
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  renderPreview();
+});
+document.getElementById('exportBtn').addEventListener('click', exportPDF);
+
+// Tab 缩进
+$input.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = $input.selectionStart, en = $input.selectionEnd;
+    $input.value = $input.value.slice(0, s) + '  ' + $input.value.slice(en);
+    $input.selectionStart = $input.selectionEnd = s + 2;
+  }
+});
+
+// ---- 初始化 ----
+$input.value = loadText();
+renderPreview();
+
+// ---- 导出 PDF ----
 async function exportPDF() {
   const $btn = document.getElementById('exportBtn');
   const questions = parseQuestions($input.value);
@@ -116,14 +156,10 @@ async function exportPDF() {
   if (typeof html2canvas === 'undefined') { alert('截图库未加载，请检查网络'); return; }
   if (!window.jspdf || !window.jspdf.jsPDF) { alert('PDF 库未加载，请检查网络'); return; }
 
-  // 等待 MathJax CHTML 渲染完成
   $btn.disabled = true;
   $btn.textContent = '渲染公式中...';
   try {
-    if (window.MathJax && window.MathJax.typesetPromise) {
-      await window.MathJax.typesetPromise($pages);
-    }
-    // CHTML 字体需要额外加载时间
+    await typesetMath();
     await new Promise(r => setTimeout(r, 800));
   } catch (e) { console.warn('MathJax:', e); }
 
@@ -141,7 +177,7 @@ async function exportPDF() {
       const canvas = await html2canvas(pageEls[i], {
         scale: 2,
         useCORS: true,
-        allowTaint: true,    // 允许跨域字体
+        allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
       });
@@ -161,28 +197,3 @@ async function exportPDF() {
     $btn.textContent = '导出 PDF';
   }
 }
-
-// ---- 事件绑定 ----
-$input.addEventListener('input', () => { saveText(); schedulePreview(); });
-document.getElementById('clearBtn').addEventListener('click', () => {
-  if (confirm('确定清空所有题目吗？')) {
-    $input.value = '';
-    saveText(); schedulePreview();
-    $input.focus();
-  }
-});
-document.getElementById('exportBtn').addEventListener('click', exportPDF);
-
-// 支持 Tab 缩进
-$input.addEventListener('keydown', (e) => {
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    const s = $input.selectionStart, en = $input.selectionEnd;
-    $input.value = $input.value.slice(0, s) + '  ' + $input.value.slice(en);
-    $input.selectionStart = $input.selectionEnd = s + 2;
-  }
-});
-
-// ---- 初始化 ----
-$input.value = loadText();
-renderPreview();

@@ -161,28 +161,73 @@ html, body {
   display: flex;
   flex-direction: column;
   background: var(--bg);
+  min-width: 0;
 }
 .preview-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 24px;
-  display: flex;
-  justify-content: center;
+  display: block;
 }
-.page-container { display: flex; flex-direction: column; gap: 24px; }
+.page-container {
+  display: block;
+  width: 210mm;
+  margin: 0 auto;
+}
+.page + .page { margin-top: 24px; }
 
-/* A4 页面（210mm × 297mm） */
+/* A4 竖版（210mm × 297mm）固定尺寸 */
 .page {
   width: 210mm;
   height: 297mm;
   background: #fff;
   box-shadow: 0 2px 12px rgba(0,0,0,.08);
-  padding: 18mm 16mm;
+  padding: 8mm 16mm;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+/* 页面标题区 */
+.page-header {
+  flex-shrink: 0;
+  text-align: left;
+  margin-bottom: 6mm;
+}
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.5px;
+  font-family: "SF Pro Display", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+.page-title .dot {
+  font-weight: 400;
+  color: var(--muted);
+  margin: 0 4px;
+}
+.page-title .date {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 18px;
+}
+.page-line {
+  border: none;
+  border-top: 1.5px solid #333;
+  margin: 6mm 0 0 0;
+}
+/* 题目网格：固定行高，不随屏幕变化 */
+.page-grid {
+  flex: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
-  gap: 8mm 10mm;
-  box-sizing: border-box;
+  grid-template-rows: repeat(3, 1fr);
+  grid-auto-flow: column;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .qitem {
   border: none;
@@ -192,16 +237,36 @@ html, body {
   color: var(--text);
   overflow: hidden;
   word-break: break-word;
+  min-width: 0;
 }
 .qitem .qbody { display: inline; font-size: inherit; }
 /* MathJax CHTML：行内公式保持行内，独立公式独占一行 */
 .qitem .qbody mjx-container { display: inline !important; font-size: inherit; }
 .qitem .qbody mjx-container[display="true"] { display: block !important; margin: 4px 0; text-align: center; }
+/* 分数内数字与普通文字等大：覆盖 MathJax CHTML 的 script level 缩放 */
+.qitem mjx-mfrac,
+.qitem mjx-frac,
+.qitem mjx-frac mjx-num,
+.qitem mjx-frac mjx-den,
+.qitem mjx-frac mjx-num *,
+.qitem mjx-frac mjx-den *,
+.qitem mjx-frac mjx-num mjx-mrow,
+.qitem mjx-frac mjx-den mjx-mrow {
+  font-size: 100% !important;
+}
+/* 左右列分割 */
+.qitem.left-col {
+  border-right: 0.5px solid #d0d0d0;
+  padding-right: 6mm;
+}
+.qitem.right-col {
+  padding-left: 6mm;
+}
 
 /* 空白占位 */
 .qitem.empty { visibility: hidden; }
 
 /* 导出 PDF 时隐藏阴影与滚动 */
 .exporting .preview-scroll { overflow: visible; padding: 0; }
-.exporting .page { box-shadow: none; margin: 0; }
-.exporting .page-container { gap: 0; }
+.exporting .page { box-shadow: none; }
+.exporting .page + .page { margin-top: 0; }
