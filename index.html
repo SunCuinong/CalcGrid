@@ -7,13 +7,16 @@
 <script>
   // MathJax 配置：先设置好，等脚本加载
   window.MathJax = {
-    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      packages: { '[+]': ['ams', 'base', 'cases'] }
+    },
     chtml: { fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2' },
     options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
     startup: {
       ready: () => {
         MathJax.startup.defaultReady();
-        // MathJax 内部完全就绪后回调
         if (window._onMathJaxReady) window._onMathJaxReady();
       }
     }
@@ -35,50 +38,116 @@
 
   <main class="layout">
     <aside class="editor-panel">
-      <div class="panel-head">
-        <span>题目输入</span>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input id="datePicker" type="date" style="height:28px;font-size:12px;padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:#fff;outline:none;" />
-          <button id="refreshBtn" class="btn btn-ghost" style="height:28px;font-size:12px;padding:0 10px;">刷新</button>
-          <small id="countTip">共 0 题</small>
+      <!-- 顶部 Tab 切换 -->
+      <div class="mode-tabs">
+        <button class="tab-btn active" data-mode="calc">计算题</button>
+        <button class="tab-btn" data-mode="word">应用题</button>
+        <button class="tab-btn" data-mode="free">自由模式</button>
+      </div>
+
+      <!-- 计算题面板 -->
+      <div class="mode-panel" data-panel="calc">
+        <div class="panel-head">
+          <span>题目输入</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input id="datePicker" type="date" style="height:28px;font-size:12px;padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:#fff;outline:none;" />
+            <button id="refreshBtn" class="btn btn-ghost" style="height:28px;font-size:12px;padding:0 10px;">刷新</button>
+            <small id="countTip">共 0 题</small>
+          </div>
+        </div>
+        <div class="editor-body">
+          <textarea id="bulkInput" class="bulk-input" placeholder="在此粘贴所有题目，支持一次性粘贴。&#10;&#10;题目之间用空行隔开，或用 --- 分隔。&#10;&#10;支持数学公式，用 $...$ 包裹，例如：&#10;计算 $\dfrac{3}{4}+\dfrac{2}{3}$ 的值。"></textarea>
+        </div>
+        <div class="syntax-help">
+          <details>
+            <summary>公式语法帮助（点击展开）</summary>
+            <div class="help-grid">
+              <div class="help-row"><code>分数</code><code class="src">\dfrac{a}{b}</code><span class="demo">$\dfrac{a}{b}$</span></div>
+              <div class="help-row"><code>平方/上标</code><code class="src">x^2</code><span class="demo">$x^2$</span></div>
+              <div class="help-row"><code>下标</code><code class="src">x_i</code><span class="demo">$x_i$</span></div>
+              <div class="help-row"><code>根号</code><code class="src">\sqrt{2}</code><span class="demo">$\sqrt{2}$</span></div>
+              <div class="help-row"><code>n 次根号</code><code class="src">\sqrt[3]{8}</code><span class="demo">$\sqrt[3]{8}$</span></div>
+              <div class="help-row"><code>大括号（分组）</code><code class="src">\left\{ x \middle| x>0 \right\}</code><span class="demo">$\left\{ x \middle| x>0 \right\}$</span></div>
+              <div class="help-row"><code>绝对值</code><code class="src">\left| x \right|</code><span class="demo">$\left| x \right|$</span></div>
+              <div class="help-row"><code>括号自适应</code><code class="src">\left( \dfrac{a}{b} \right)</code><span class="demo">$\left( \dfrac{a}{b} \right)$</span></div>
+              <div class="help-row"><code>方程组</code><code class="src">\begin{cases} x+y=1 \\ x-y=3 \end{cases}</code><span class="demo">$$\begin{cases} x+y=1 \\ x-y=3 \end{cases}$$</span></div>
+              <div class="help-row"><code>大于等于</code><code class="src">\geq</code><span class="demo">$\geq$</span></div>
+              <div class="help-row"><code>不等号</code><code class="src">\neq</code><span class="demo">$\neq$</span></div>
+              <div class="help-row"><code>约等号</code><code class="src">\approx</code><span class="demo">$\approx$</span></div>
+              <div class="help-row"><code>乘号</code><code class="src">\times</code><span class="demo">$\times$</span></div>
+              <div class="help-row"><code>除号</code><code class="src">\div</code><span class="demo">$\div$</span></div>
+              <div class="help-row"><code>度数</code><code class="src">30^\circ</code><span class="demo">$30^\circ$</span></div>
+              <div class="help-row"><code>角</code><code class="src">\angle ABC</code><span class="demo">$\angle ABC$</span></div>
+              <div class="help-row"><code>三角形</code><code class="src">\triangle</code><span class="demo">$\triangle$</span></div>
+              <div class="help-row"><code>圆周率</code><code class="src">\pi</code><span class="demo">$\pi$</span></div>
+              <div class="help-row"><code>无穷</code><code class="src">\infty</code><span class="demo">$\infty$</span></div>
+              <div class="help-row"><code>求和</code><code class="src">\sum_{i=1}^{n}</code><span class="demo">$\sum_{i=1}^{n}$</span></div>
+            </div>
+            <p class="help-tip">行内公式用 <code>$...$</code>，独占一行的公式用 <code>$$...$$</code>。反斜杠 <code>\</code> 开头的是命令，需要成对的大括号 <code>{ }</code> 包裹参数。</p>
+          </details>
         </div>
       </div>
-      <div class="editor-body">
-        <textarea id="bulkInput" class="bulk-input" placeholder="在此粘贴所有题目，支持一次性粘贴。&#10;&#10;题目之间用空行隔开，或用 --- 分隔。&#10;&#10;支持数学公式，用 $...$ 包裹，例如：&#10;计算 $\dfrac{3}{4}+\dfrac{2}{3}$ 的值。"></textarea>
+
+      <!-- 应用题面板 -->
+      <div class="mode-panel" data-panel="word" hidden>
+        <div class="panel-head">
+          <span>应用题</span>
+          <small id="wordCountTip">共 3 题</small>
+        </div>
+        <div class="editor-body word-body">
+          <label class="word-field">
+            <span>标题</span>
+            <input id="wordTitle" type="text" value="应用题" placeholder="页面标题">
+          </label>
+          <label class="word-field">
+            <span>副标题</span>
+            <input id="wordDate" type="text" value="详情" placeholder="副标题">
+          </label>
+          <div class="word-divider"></div>
+          <textarea id="wordInput" class="word-input" placeholder="在此输入所有应用题。&#10;&#10;题目之间用一整行空白隔开（即两个换行），换行原样保留。&#10;&#10;支持 **粗体**、*斜体* 与 LaTeX 公式 $...$。">小明有一些糖果，分给 3 个小朋友后还剩 5 颗，原来有 $x$ 颗。求 $x$。
+
+一辆汽车 $2\dfrac{1}{2}$ 小时行驶了 $180$ 千米，平均每小时行驶多少千米？
+
+已知长方形面积 $S = 60$，长 $a = 12$，求宽 $b$。$b = \dfrac{S}{a} = ?$</textarea>
+        </div>
       </div>
-      <div class="syntax-help">
-        <details>
-          <summary>公式语法帮助（点击展开）</summary>
-          <div class="help-grid">
-            <div class="help-row"><code>分数</code><code class="src">\dfrac{a}{b}</code><span class="demo">$\dfrac{a}{b}$</span></div>
-            <div class="help-row"><code>平方/上标</code><code class="src">x^2</code><span class="demo">$x^2$</span></div>
-            <div class="help-row"><code>下标</code><code class="src">x_i</code><span class="demo">$x_i$</span></div>
-            <div class="help-row"><code>根号</code><code class="src">\sqrt{2}</code><span class="demo">$\sqrt{2}$</span></div>
-            <div class="help-row"><code>n 次根号</code><code class="src">\sqrt[3]{8}</code><span class="demo">$\sqrt[3]{8}$</span></div>
-            <div class="help-row"><code>大括号（分组）</code><code class="src">\left\{ x \middle| x>0 \right\}</code><span class="demo">$\left\{ x \middle| x>0 \right\}$</span></div>
-            <div class="help-row"><code>绝对值</code><code class="src">\left| x \right|</code><span class="demo">$\left| x \right|$</span></div>
-            <div class="help-row"><code>括号自适应</code><code class="src">\left( \dfrac{a}{b} \right)</code><span class="demo">$\left( \dfrac{a}{b} \right)$</span></div>
-            <div class="help-row"><code>方程组</code><code class="src">\begin{cases} x+y=1 \\ x-y=3 \end{cases}</code><span class="demo">$$\begin{cases} x+y=1 \\ x-y=3 \end{cases}$$</span></div>
-            <div class="help-row"><code>大于等于</code><code class="src">\geq</code><span class="demo">$\geq$</span></div>
-            <div class="help-row"><code>不等号</code><code class="src">\neq</code><span class="demo">$\neq$</span></div>
-            <div class="help-row"><code>约等号</code><code class="src">\approx</code><span class="demo">$\approx$</span></div>
-            <div class="help-row"><code>乘号</code><code class="src">\times</code><span class="demo">$\times$</span></div>
-            <div class="help-row"><code>除号</code><code class="src">\div</code><span class="demo">$\div$</span></div>
-            <div class="help-row"><code>度数</code><code class="src">30^\circ</code><span class="demo">$30^\circ$</span></div>
-            <div class="help-row"><code>角</code><code class="src">\angle ABC</code><span class="demo">$\angle ABC$</span></div>
-            <div class="help-row"><code>三角形</code><code class="src">\triangle</code><span class="demo">$\triangle$</span></div>
-            <div class="help-row"><code>圆周率</code><code class="src">\pi</code><span class="demo">$\pi$</span></div>
-            <div class="help-row"><code>无穷</code><code class="src">\infty</code><span class="demo">$\infty$</span></div>
-            <div class="help-row"><code>求和</code><code class="src">\sum_{i=1}^{n}</code><span class="demo">$\sum_{i=1}^{n}$</span></div>
+
+      <!-- 自由模式面板 -->
+      <div class="mode-panel" data-panel="free" hidden>
+        <div class="panel-head">
+          <span>自由模式</span>
+          <small id="freeCountTip">共 1 页</small>
+        </div>
+        <div class="editor-body word-body">
+          <label class="word-field">
+            <span>标题</span>
+            <input id="freeTitle" type="text" value="自由模式" placeholder="页面标题">
+          </label>
+          <label class="word-field">
+            <span>副标题</span>
+            <input id="freeDate" type="text" value="详情" placeholder="副标题">
+          </label>
+          <div class="seg-control" role="tablist">
+            <button type="button" class="seg-btn" data-cols="1">单列</button>
+            <button type="button" class="seg-btn active" data-cols="2">双列</button>
           </div>
-          <p class="help-tip">行内公式用 <code>$...$</code>，独占一行的公式用 <code>$$...$$</code>。反斜杠 <code>\</code> 开头的是命令，需要成对的大括号 <code>{ }</code> 包裹参数。</p>
-        </details>
+          <div class="word-divider"></div>
+          <textarea id="freeInput" class="word-input" placeholder="在此输入自由内容，整页连贯显示，不分上下三段。&#10;&#10;支持 **粗体**、*斜体* 与 LaTeX 公式 $...$。">在 $24$ 厘米 $\times 24$ 厘米的方格纸上，依次画出周长为 $96$、$108$、$120$ 厘米的长方形，并填表。
+
+| 周长 | 长 | 宽 | 面积 |
+| --- | --- | --- | --- |
+| $96$ |  |  |  |
+| $108$ |  |  |  |
+| $120$ |  |  |  |
+
+**观察**：当长方形的周长固定时，**长和宽越接近**，面积越大；**长和宽相差越大**，面积越小。</textarea>
+        </div>
       </div>
     </aside>
 
     <section class="preview-panel">
       <div class="panel-head">
-        <span>预览（每页 6 题 · 两列）</span>
+        <span id="previewTitle">预览（每页 6 题 · 两列）</span>
         <small>A4 纸张</small>
       </div>
       <div id="previewArea" class="preview-scroll">

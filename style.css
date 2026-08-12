@@ -66,6 +66,215 @@ html, body {
   display: flex;
   flex-direction: column;
 }
+
+/* 模式 Tab（计算题 / 应用题） */
+.mode-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1;
+  height: 40px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.tab-btn:hover { color: var(--text); background: var(--ghost-hover); }
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  background: #fff;
+}
+
+/* 模式面板 */
+.mode-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.mode-panel[hidden] { display: none; }
+
+/* 应用题：顶部两个输入字段 */
+.word-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.word-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.word-field > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+.word-field input {
+  height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  background: #fbfcfd;
+  outline: none;
+}
+.word-field input:focus {
+  border-color: var(--primary);
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(43,108,255,.12);
+}
+.word-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  flex-shrink: 0;
+}
+/* 单个大输入框，占满剩余空间 */
+.word-input {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: "SF Mono", "Menlo", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
+  background: #fbfcfd;
+  outline: none;
+  white-space: pre-wrap;
+  min-height: 0;
+}
+.word-input:focus {
+  border-color: var(--primary);
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(43,108,255,.12);
+}
+.word-input::placeholder { color: #b6bbc4; }
+
+/* 分段控件（单列 / 双列） */
+.seg-control {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  flex-shrink: 0;
+}
+.seg-btn {
+  height: 28px;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.seg-btn:last-child { border-right: none; }
+.seg-btn:hover { color: var(--text); background: var(--ghost-hover); }
+.seg-btn.active {
+  color: #fff;
+  background: var(--primary);
+}
+
+/* 自由模式页面：单格占满整页，无横分割线 */
+.page.page-free .page-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  gap: 0;
+}
+/* 双列：CSS 多栏流式排版，内容先填左栏，溢出到右栏，中间竖分割线 */
+.page.page-free.cols-2 .page-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+.page.page-free.cols-2 .witem .wbody {
+  column-count: 2;
+  column-gap: 12mm;
+  column-rule: 0.5px solid #d0d0d0;
+}
+.page.page-free .witem {
+  display: flex;
+  flex-direction: column;
+  padding: 5mm 6mm;
+  border-bottom: none;
+  min-height: 0;
+  overflow: hidden;
+}
+.page.page-free .witem .wbody {
+  flex: 1;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--text);
+  overflow: hidden;
+  min-height: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.page.page-free .witem .wbody mjx-container { font-size: inherit !important; }
+.page.page-free .witem .wbody mjx-container[display="true"] { display: block !important; margin: 4px 0; text-align: left; }
+.page.page-free .witem mjx-frac mjx-num,
+.page.page-free .witem mjx-frac mjx-den,
+.page.page-free .witem mjx-frac mjx-num *,
+.page.page-free .witem mjx-frac mjx-den * {
+  font-size: 100% !important;
+}
+
+/* 应用题页面：三行等分，横分割线 */
+.page.page-word .page-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 0;
+}
+.page.page-word .witem {
+  display: flex;
+  flex-direction: column;
+  padding: 5mm 6mm;
+  border-bottom: 0.5px solid #d0d0d0;
+  min-height: 0;
+  overflow: hidden;
+}
+.page.page-word .witem:last-child { border-bottom: none; }
+.page.page-word .witem .wbody {
+  flex: 1;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--text);
+  overflow: hidden;
+  min-height: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.page.page-word .witem .wbody mjx-container { font-size: inherit !important; }
+.page.page-word .witem .wbody mjx-container[display="true"] { display: block !important; margin: 4px 0; text-align: left; }
+/* 分数内数字等大 */
+.page.page-word .witem mjx-frac mjx-num,
+.page.page-word .witem mjx-frac mjx-den,
+.page.page-word .witem mjx-frac mjx-num *,
+.page.page-word .witem mjx-frac mjx-den * {
+  font-size: 100% !important;
+}
+
 .panel-head {
   height: 44px;
   display: flex;

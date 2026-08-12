@@ -1,11 +1,23 @@
 // ===== 数学题排版工具 =====
 const STORAGE_KEY = 'yoyo_math_bulk_v2';
 const PER_PAGE = 6;
+const PER_PAGE_WORD = 3;
 
 const $input = document.getElementById('bulkInput');
 const $count = document.getElementById('countTip');
 const $pages = document.getElementById('pageContainer');
 const $date = document.getElementById('datePicker');
+const $tabBtns = document.querySelectorAll('.tab-btn');
+const $modePanels = document.querySelectorAll('.mode-panel');
+const $previewTitle = document.getElementById('previewTitle');
+const $wordTitle = document.getElementById('wordTitle');
+const $wordDate = document.getElementById('wordDate');
+const $wordCountTip = document.getElementById('wordCountTip');
+const $wordInput = document.getElementById('wordInput');
+const $freeTitle = document.getElementById('freeTitle');
+const $freeDate = document.getElementById('freeDate');
+const $freeInput = document.getElementById('freeInput');
+const $freeCountTip = document.getElementById('freeCountTip');
 
 const DEFAULT_TEXT =
 `计算 $\\dfrac{3}{4} + \\dfrac{2}{3}$ 的结果。
@@ -33,7 +45,6 @@ function loadText() {
 }
 function saveText() { localStorage.setItem(STORAGE_KEY, $input.value); }
 
-// 按换行分隔，每行一道题，空行 / --- 自动跳过
 function parseQuestions(text) {
   return text.split('\n')
     .map(s => s.trim())
@@ -46,10 +57,34 @@ function schedulePreview() {
   previewTimer = setTimeout(renderPreview, 150);
 }
 
+// ---- 模式切换 ----
+let currentMode = 'calc';
+function setMode(mode) {
+  currentMode = mode;
+  $tabBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  $modePanels.forEach(p => p.hidden = (p.dataset.panel !== mode));
+  $previewTitle.textContent = (mode === 'calc')
+    ? '预览（每页 6 题 · 两列）'
+    : (mode === 'word')
+      ? '预览（每页 3 题 · 应用题）'
+      : '预览（自由模式 · 单页）';
+  renderPreview();
+}
+
+$tabBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+// ---- 渲染 ----
 function renderPreview() {
+  $pages.innerHTML = '';
+  if (currentMode === 'calc') renderCalcPage();
+  else if (currentMode === 'word') renderWordPage();
+  else renderFreePage();
+  typesetMath();
+}
+
+function renderCalcPage() {
   const questions = parseQuestions($input.value);
   $count.textContent = `共 ${questions.length} 题`;
-  $pages.innerHTML = '';
 
   if (questions.length === 0) {
     $pages.innerHTML = '<div style="color:#8a9099;padding:40px;text-align:center;">左侧输入题目后在此预览</div>';
@@ -64,23 +99,20 @@ function renderPreview() {
   for (let p = 0; p < totalPages; p++) {
     const page = document.createElement('div');
     page.className = 'page';
-
-    const header = document.createElement('div');
-    header.className = 'page-header';
-    header.innerHTML = `<div class="page-title">Calculation Worksheet <span class="dot">·</span><span class="date">${dateStr}</span></div><hr class="page-line" />`;
-    page.appendChild(header);
-
-    const grid = document.createElement('div');
-    grid.className = 'page-grid';
-    const start = p * PER_PAGE;
-    const slice = questions.slice(start, start + PER_PAGE);
-
+    page.innerHTML = `
+      <div class="page-header">
+        <div class="page-title">Calculation Worksheet <span class="dot">·</span><span class="date">${dateStr}</span></div>
+        <hr class="page-line" />
+      </div>
+      <div class="page-grid"></div>`;
+    const grid = page.querySelector('.page-grid');
+    const slice = questions.slice(p * PER_PAGE, p * PER_PAGE + PER_PAGE);
     slice.forEach((q, i) => {
       const item = document.createElement('div');
       item.className = 'qitem' + (i < 3 ? ' left-col' : ' right-col');
       const span = document.createElement('span');
       span.className = 'qbody';
-      span.textContent = q;     // 不转义，原样交给 MathJax
+      span.innerHTML = formatRichText(q);
       item.appendChild(span);
       grid.appendChild(item);
     });
@@ -90,12 +122,130 @@ function renderPreview() {
       ph.innerHTML = '&nbsp;';
       grid.appendChild(ph);
     }
-    page.appendChild(grid);
     $pages.appendChild(page);
   }
+}
 
-  // 调用 MathJax 渲染
-  typesetMath();
+// 解析应用题：以一整行空白（连续空行）为分隔，每段内换行原样保留
+function parseWordQuestions(text) {
+  return text.split(/\n\s*\n/)
+    .map(s => s.replace(/^\n+|\n+$/g, '').replace(/\s+$/g, ''))
+    .filter(s => s.length > 0);
+}
+
+function renderWordPage() {
+  const items = parseWordQuestions($wordInput.value);
+  $wordCountTip.textContent = `共 ${items.length} 题`;
+
+  const title = $wordTitle.value || '应用题';
+  const date = $wordDate.value || '';
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE_WORD));
+  for (let p = 0; p < totalPages; p++) {
+    const page = document.createElement('div');
+    page.className = 'page page-word';
+    const headerHtml = `
+      <div class="page-header">
+        <div class="page-title">${escapeHtml(title)} ${date ? `<span class="dot">·</span><span class="date">${escapeHtml(date)}</span>` : ''}</div>
+        <hr class="page-line" />
+      </div>`;
+    let answerHtml = '<div class="page-grid">';
+    const slice = items.slice(p * PER_PAGE_WORD, p * PER_PAGE_WORD + PER_PAGE_WORD);
+    for (let i = 0; i < PER_PAGE_WORD; i++) {
+      const it = slice[i] || '';
+      answerHtml += `<div class="witem"><div class="wbody">${it ? '' : '&nbsp;'}</div></div>`;
+    }
+    answerHtml += '</div>';
+    page.innerHTML = headerHtml + answerHtml;
+
+    const bodies = page.querySelectorAll('.wbody');
+    slice.forEach((q, i) => {
+      if (i < bodies.length && q) {
+        const span = document.createElement('span');
+        span.className = 'qbody';
+        span.innerHTML = formatRichText(q);
+        bodies[i].appendChild(span);
+      }
+    });
+
+    $pages.appendChild(page);
+  }
+}
+
+// 自由模式：单列或双列；双列按空行分段，左→右填充满后换页
+let freeCols = 2;
+function setFreeCols(n) {
+  freeCols = n;
+  document.querySelectorAll('.seg-btn').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.cols) === n);
+  });
+  renderPreview();
+}
+function fillWbody(body, text) {
+  if (!text) { body.innerHTML = '&nbsp;'; return; }
+  const span = document.createElement('span');
+  span.className = 'qbody';
+  span.innerHTML = formatRichText(text);
+  body.innerHTML = '';
+  body.appendChild(span);
+}
+
+function renderFreePage() {
+  const content = $freeInput.value.replace(/\s+$/g, '');
+  const title = $freeTitle.value || '自由模式';
+  const date = $freeDate.value || '';
+  const headerHtml = (pageClass) => `
+    <div class="page-header">
+      <div class="page-title">${escapeHtml(title)} ${date ? `<span class="dot">·</span><span class="date">${escapeHtml(date)}</span>` : ''}</div>
+      <hr class="page-line" />
+    </div>
+    <div class="page-grid">${pageClass}</div>`;
+
+  if (freeCols === 1) {
+    $freeCountTip.textContent = content ? '共 1 页' : '空内容';
+    const page = document.createElement('div');
+    page.className = 'page page-free cols-1';
+    page.innerHTML = headerHtml('<div class="witem"><div class="wbody"></div></div>');
+    fillWbody(page.querySelector('.wbody'), content);
+    $pages.appendChild(page);
+    return;
+  }
+
+  // 双列：用 CSS columns 流式排版，内容先填满左栏再溢出到右栏
+  $freeCountTip.textContent = content ? '共 1 页' : '空内容';
+  const page = document.createElement('div');
+  page.className = 'page page-free cols-2';
+  page.innerHTML = headerHtml('<div class="witem"><div class="wbody"></div></div>');
+  fillWbody(page.querySelector('.wbody'), content);
+  $pages.appendChild(page);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 处理 **bold** / *italic*，同时 HTML 转义其余字符（不破坏 LaTeX 命令的 \ 等）
+function applyMarkdown(s) {
+  let out = escapeHtml(s);
+  // 先处理 ** **（避免被 * * 提前吃掉）
+  out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  out = out.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  return out;
+}
+
+// 将文本切分为「公式段」和「普通文本段」，公式段原样保留，
+// 文本段应用 **粗体** *斜体* 规则并 HTML 转义
+function formatRichText(text) {
+  // 按 $...$ 分段（不支持嵌套，单 $ 与 $$ 区分由 MathJax 自行处理；
+  // 这里只切出 $...$ 区间，让 MathJax 后续解析）
+  const parts = text.split(/(\$[^$]+\$)/g);
+  return parts.map(p => {
+    if (/^\$[^$]+\$$/.test(p)) {
+      // 公式段：保留原样，但 HTML 转义外面的 < > &（MathJax 拿到的是 DOM 文本节点，不会被 HTML 解析干扰）
+      return escapeHtml(p);
+    }
+    return applyMarkdown(p);
+  }).join('');
 }
 
 function typesetMath() {
@@ -105,37 +255,55 @@ function typesetMath() {
   return Promise.resolve();
 }
 
-// MathJax 就绪回调（由 index.html 中 startup.ready 同步触发）
 window._onMathJaxReady = () => {
   console.log('[MathJax] ready');
   typesetMath();
 };
-
-// 兜底：脚本可能不在 head 里，轮询检测
 (function waitMJ() {
-  if (window.MathJax && window.MathJax.typesetPromise) {
-    typesetMath();
-    return;
-  }
+  if (window.MathJax && window.MathJax.typesetPromise) { typesetMath(); return; }
   setTimeout(waitMJ, 200);
 })();
 
-// ---- 事件绑定 ----
+// ---- 事件 ----
 $input.addEventListener('input', () => { saveText(); schedulePreview(); });
 $date.addEventListener('change', () => { renderPreview(); });
+
 document.getElementById('clearBtn').addEventListener('click', () => {
-  if (confirm('确定清空所有题目吗？')) {
-    $input.value = '';
-    saveText(); schedulePreview();
-    $input.focus();
+  if (currentMode === 'calc') {
+    if (confirm('确定清空所有题目吗？')) {
+      $input.value = '';
+      saveText(); schedulePreview();
+      $input.focus();
+    }
+  } else if (currentMode === 'word') {
+    if (confirm('确定清空所有应用题吗？')) {
+      $wordInput.value = '';
+      renderPreview();
+    }
+  } else {
+    if (confirm('确定清空自由模式内容吗？')) {
+      $freeInput.value = '';
+      renderPreview();
+    }
   }
 });
-document.getElementById('refreshBtn').addEventListener('click', () => {
-  renderPreview();
-});
+
+document.getElementById('refreshBtn').addEventListener('click', () => renderPreview());
 document.getElementById('exportBtn').addEventListener('click', exportPDF);
 
-// Tab 缩进
+// 应用题输入实时刷新
+$wordTitle.addEventListener('input', schedulePreview);
+$wordDate.addEventListener('input', schedulePreview);
+$wordInput.addEventListener('input', schedulePreview);
+
+// 自由模式输入实时刷新
+$freeTitle.addEventListener('input', schedulePreview);
+$freeDate.addEventListener('input', schedulePreview);
+$freeInput.addEventListener('input', schedulePreview);
+document.querySelectorAll('.seg-btn').forEach(b => {
+  b.addEventListener('click', () => setFreeCols(Number(b.dataset.cols)));
+});
+
 $input.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
     e.preventDefault();
@@ -157,12 +325,6 @@ renderPreview();
 // ---- 导出 PDF ----
 async function exportPDF() {
   const $btn = document.getElementById('exportBtn');
-  const questions = parseQuestions($input.value);
-  if (questions.length === 0) { alert('请先输入题目'); return; }
-
-  if (typeof html2canvas === 'undefined') { alert('截图库未加载，请检查网络'); return; }
-  if (!window.jspdf || !window.jspdf.jsPDF) { alert('PDF 库未加载，请检查网络'); return; }
-
   $btn.disabled = true;
   $btn.textContent = '渲染公式中...';
   try {
@@ -175,9 +337,19 @@ async function exportPDF() {
 
   try {
     const { jsPDF } = window.jspdf;
+    if (!window.jspdf || !window.jspdf.jsPDF) { alert('PDF 库未加载，请检查网络'); return; }
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
     const pageEls = $pages.querySelectorAll('.page');
+    if (pageEls.length === 0) { alert('暂无内容'); return; }
     const A4_W = 210, A4_H = 297;
+
+    // 应用题：命名以"应用题_"开头
+    const datePart = (currentMode === 'calc')
+      ? ($date.value || new Date().toISOString().slice(0, 10))
+      : (currentMode === 'word')
+        ? ($wordDate.value || new Date().toISOString().slice(0, 10))
+        : ($freeDate.value || new Date().toISOString().slice(0, 10));
+    const prefix = (currentMode === 'calc') ? '计算题_' : (currentMode === 'word') ? '应用题_' : '自由模式_';
 
     for (let i = 0; i < pageEls.length; i++) {
       $btn.textContent = `生成中 ${i + 1}/${pageEls.length}...`;
@@ -193,7 +365,7 @@ async function exportPDF() {
       pdf.addImage(imgData, 'JPEG', 0, 0, A4_W, A4_H, undefined, 'FAST');
     }
 
-    const filename = '数学题_' + ($date.value || new Date().toISOString().slice(0, 10)) + '.pdf';
+    const filename = prefix + datePart + '.pdf';
     pdf.save(filename);
   } catch (e) {
     console.error('导出失败:', e);
