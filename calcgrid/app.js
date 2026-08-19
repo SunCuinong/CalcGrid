@@ -201,23 +201,40 @@ function renderFreePage() {
     </div>
     <div class="page-grid">${pageClass}</div>`;
 
+  // 单列：按空行分段，每段渲染一页，支持多页
   if (freeCols === 1) {
-    $freeCountTip.textContent = content ? '共 1 页' : '空内容';
-    const page = document.createElement('div');
-    page.className = 'page page-free cols-1';
-    page.innerHTML = headerHtml('<div class="witem"><div class="wbody"></div></div>');
-    fillWbody(page.querySelector('.wbody'), content);
-    $pages.appendChild(page);
+    const segs = parseWordQuestions(content);
+    const totalPages = Math.max(1, segs.length);
+    $freeCountTip.textContent = segs.length ? `共 ${totalPages} 页` : '空内容';
+    for (let p = 0; p < totalPages; p++) {
+      const page = document.createElement('div');
+      page.className = 'page page-free cols-1';
+      page.innerHTML = headerHtml('<div class="witem"><div class="wbody"></div></div>');
+      fillWbody(page.querySelector('.wbody'), segs[p] || '');
+      $pages.appendChild(page);
+    }
     return;
   }
 
-  // 双列：用 CSS columns 流式排版，内容先填满左栏再溢出到右栏
-  $freeCountTip.textContent = content ? '共 1 页' : '空内容';
-  const page = document.createElement('div');
-  page.className = 'page page-free cols-2';
-  page.innerHTML = headerHtml('<div class="witem"><div class="wbody"></div></div>');
-  fillWbody(page.querySelector('.wbody'), content);
-  $pages.appendChild(page);
+  // 双列：按空行分段，每 2 段为一页——第 1 段填左栏、第 2 段填右栏，满 2 段换下一页
+  const segs = parseWordQuestions(content);
+  const totalPages = Math.max(1, Math.ceil(segs.length / 2));
+  $freeCountTip.textContent = segs.length ? `共 ${totalPages} 页` : '空内容';
+
+  for (let p = 0; p < totalPages; p++) {
+    const left = segs[p * 2] || '';
+    const right = segs[p * 2 + 1] || '';
+    const page = document.createElement('div');
+    page.className = 'page page-free cols-2';
+    const cells = `
+      <div class="witem left-col"><div class="wbody"></div></div>
+      <div class="witem right-col"><div class="wbody"></div></div>`;
+    page.innerHTML = headerHtml(cells);
+    const bodies = page.querySelectorAll('.wbody');
+    fillWbody(bodies[0], left);
+    fillWbody(bodies[1], right);
+    $pages.appendChild(page);
+  }
 }
 
 function escapeHtml(s) {
@@ -226,26 +243,174 @@ function escapeHtml(s) {
 
 // 处理 **bold** / *italic*，同时 HTML 转义其余字符（不破坏 LaTeX 命令的 \ 等）
 function applyMarkdown(s) {
-  let out = escapeHtml(s);
-  // 先处理 ** **（避免被 * * 提前吃掉）
+  // 行内代码 `code`：先抽出占位，避免其中的 * _ 被粗斜体规则破坏
+  const codes = [];
+  // 用户显式写 <br> / <br/> 作为换行标识：先占位，转义后再还原（避免被当成 HTML 标签整体过滤）
+  const brs = [];
+  let out = s.replace(/<br\s*\/?>/gi, () => {
+    const idx = brs.length;
+    brs.push(true);
+    return `\u0002BR${idx}\u0002`;
+  }).replace(/`([^`]+)`/g, (_, c) => {
+    const idx = codes.length;
+    codes.push(c);
+    return `\u0001CODE${idx}\u0001`;
+  });
+  out = escapeHtml(out);
   out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  out = out.replace(/\u0001CODE(\d+)\u0001/g, (_, i) =>
+    `<code class="md-code">${escapeHtml(codes[Number(i)])}</code>`);
+  out = out.replace(/\u0002BR(\d+)\u0002/g, '<br>');
   return out;
 }
 
-// 将文本切分为「公式段」和「普通文本段」，公式段原样保留，
-// 文本段应用 **粗体** *斜体* 规则并 HTML 转义
+// 将文本渲染为富文本 HTML：
+// 块级：表格、标题、分割线、引用、有序/无序列表、普通段落
+// 行内：公式 $...$、行内代码 `code`、**粗体** *斜体*
 function formatRichText(text) {
-  // 按 $...$ 分段（不支持嵌套，单 $ 与 $$ 区分由 MathJax 自行处理；
-  // 这里只切出 $...$ 区间，让 MathJax 后续解析）
+  // 先提取表格块并占位，避免被公式/Markdown 处理干扰
+  const tables = [];
+  // 匹配连续的以 | 开头行；用 [^\n] 防止 . 跨行/贪婪误吃；末尾换行可选（最后一行可能无 \n）
+  const TABLE_RE = /(?:^[ \t]*\|[^\n]*\|[ \t]*(?:\n|$))+/gm;
+  const blocks = [];
+  let tmp = text.replace(TABLE_RE, (m) => {
+    const lines = m.split('\n').filter(l => l.trim().length > 0);
+    // 必须至少 2 行，且第二行是分隔行 | --- | --- |
+    if (lines.length < 2 || !/^\|?\s*:?-{2,}/.test(lines[1].trim())) return m;
+    const idx = blocks.length;
+    blocks.push(buildTableHtml(lines));
+    return `\u0000BLK${idx}\u0000`;
+  });
+
+  let out = renderBlocks(tmp, blocks);
+  return out;
+}
+
+// 块级解析：按行处理，识别标题/分割线/引用/列表，其余按段落
+function renderBlocks(text, blocks) {
+  const lines = text.split('\n');
+  const html = [];
+  let i = 0;
+  let listOpen = null; // null | 'ul' | 'ol'
+  const closeList = () => { if (listOpen) { html.push(`</${listOpen}>`); listOpen = null; } };
+
+  while (i < lines.length) {
+    let line = lines[i];
+
+    // 已占位的表格/块
+    const blk = line.match(/^\u0000BLK(\d+)\u0000$/);
+    if (blk) { closeList(); html.push(blocks[Number(blk[1])] || ''); i++; continue; }
+
+    const trimmed = line.trim();
+
+    // 空行
+    if (trimmed === '') { closeList(); i++; continue; }
+
+    // 分割线 --- / *** / ___
+    if (/^(\-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      closeList();
+      html.push('<hr class="md-hr" />');
+      i++;
+      continue;
+    }
+
+    // 标题 # ~ ######
+    const hm = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (hm) {
+      closeList();
+      const level = hm[1].length;
+      html.push(`<h${level} class="md-h md-h${level}">${formatInline(hm[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    // 引用 > （支持多行连续）
+    if (/^>\s?/.test(trimmed)) {
+      closeList();
+      const quote = [];
+      while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
+        quote.push(lines[i].trim().replace(/^>\s?/, ''));
+        i++;
+      }
+      html.push(`<blockquote class="md-quote">${formatInline(quote.join('<br>'))}</blockquote>`);
+      continue;
+    }
+
+    // 无序列表 - / * / +
+    const um = trimmed.match(/^[-*+]\s+(.*)$/);
+    if (um) {
+      if (listOpen !== 'ul') { closeList(); html.push('<ul class="md-ul">'); listOpen = 'ul'; }
+      html.push(`<li>${formatInline(um[1])}</li>`);
+      i++;
+      continue;
+    }
+
+    // 有序列表 1. 2) 等
+    const om = trimmed.match(/^\d+[.)]\s+(.*)$/);
+    if (om) {
+      if (listOpen !== 'ol') { closeList(); html.push('<ol class="md-ol">'); listOpen = 'ol'; }
+      html.push(`<li>${formatInline(om[1])}</li>`);
+      i++;
+      continue;
+    }
+
+    // 普通段落（连续非空、非特殊行合并，内部换行用 <br>）
+    closeList();
+    const para = [trimmed];
+    i++;
+    while (i < lines.length && lines[i].trim() !== '' &&
+           !/^(\-{3,}|\*{3,}|_{3,})$/.test(lines[i].trim()) &&
+           !/^#{1,6}\s+/.test(lines[i].trim()) &&
+           !/^>\s?/.test(lines[i].trim()) &&
+           !/^[-*+]\s+/.test(lines[i].trim()) &&
+           !/^\d+[.)]\s+/.test(lines[i].trim()) &&
+           !/^\u0000BLK\d+\u0000$/.test(lines[i].trim())) {
+      para.push(lines[i].trim());
+      i++;
+    }
+    html.push(`<p class="md-p">${formatInline(para.join('<br>'))}</p>`);
+  }
+  closeList();
+  return html.join('');
+}
+
+// 行内格式：$...$ 公式 + `code` 行内代码 + **粗体** + *斜体*
+function formatInline(text) {
+  // 先按公式分段，公式段保持原样
   const parts = text.split(/(\$[^$]+\$)/g);
   return parts.map(p => {
     if (/^\$[^$]+\$$/.test(p)) {
-      // 公式段：保留原样，但 HTML 转义外面的 < > &（MathJax 拿到的是 DOM 文本节点，不会被 HTML 解析干扰）
       return escapeHtml(p);
     }
     return applyMarkdown(p);
   }).join('');
+}
+
+// 把 Markdown 表格行数组转为 HTML <table>，单元格内支持公式/粗体/斜体
+function buildTableHtml(lines) {
+  // 解析每行的单元格
+  const parseRow = (line) => {
+    let s = line.trim();
+    if (s.startsWith('|')) s = s.slice(1);
+    if (s.endsWith('|')) s = s.slice(0, -1);
+    return s.split('|').map(c => c.trim());
+  };
+  const header = parseRow(lines[0]);
+  const body = lines.slice(2).map(parseRow);
+  let html = '<table class="md-table"><thead><tr>';
+  header.forEach(h => { html += `<th>${formatInline(h)}</th>`; });
+  html += '</tr></thead><tbody>';
+  body.forEach(row => {
+    html += '<tr>';
+    // 列数对齐
+    for (let i = 0; i < header.length; i++) {
+      html += `<td>${formatInline(row[i] || '')}</td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
 }
 
 function typesetMath() {
@@ -343,13 +508,20 @@ async function exportPDF() {
     if (pageEls.length === 0) { alert('暂无内容'); return; }
     const A4_W = 210, A4_H = 297;
 
-    // 应用题：命名以"应用题_"开头
-    const datePart = (currentMode === 'calc')
-      ? ($date.value || new Date().toISOString().slice(0, 10))
-      : (currentMode === 'word')
-        ? ($wordDate.value || new Date().toISOString().slice(0, 10))
-        : ($freeDate.value || new Date().toISOString().slice(0, 10));
-    const prefix = (currentMode === 'calc') ? '计算题_' : (currentMode === 'word') ? '应用题_' : '自由模式_';
+    // 文件名：计算题="计算题_日期"；应用题/自由模式="标题_副标题"
+    let filename;
+    if (currentMode === 'calc') {
+      const datePart = $date.value || new Date().toISOString().slice(0, 10);
+      filename = '计算题_' + datePart + '.pdf';
+    } else if (currentMode === 'word') {
+      const title = ($wordTitle.value || '应用题').trim();
+      const sub = ($wordDate.value || '').trim();
+      filename = (sub ? (title + '_' + sub) : title) + '.pdf';
+    } else {
+      const title = ($freeTitle.value || '自由模式').trim();
+      const sub = ($freeDate.value || '').trim();
+      filename = (sub ? (title + '_' + sub) : title) + '.pdf';
+    }
 
     for (let i = 0; i < pageEls.length; i++) {
       $btn.textContent = `生成中 ${i + 1}/${pageEls.length}...`;
@@ -365,7 +537,6 @@ async function exportPDF() {
       pdf.addImage(imgData, 'JPEG', 0, 0, A4_W, A4_H, undefined, 'FAST');
     }
 
-    const filename = prefix + datePart + '.pdf';
     pdf.save(filename);
   } catch (e) {
     console.error('导出失败:', e);
